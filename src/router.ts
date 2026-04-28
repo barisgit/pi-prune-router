@@ -5,6 +5,7 @@ import type {
 	PruneResult,
 } from "./types";
 import { savePruneArtifact } from "./artifacts";
+import { logDiagnostic } from "./log";
 import { normalizePruneRequest } from "./normalize";
 
 interface RegisteredProvider extends PruneProviderRegistration {
@@ -22,6 +23,7 @@ export class PruneRouter {
 			priority: provider.priority ?? 0,
 			registeredAt: Date.now(),
 		});
+		logDiagnostic(`[pi-prune-router] registered provider name=${provider.name} priority=${provider.priority ?? 0}`);
 	}
 
 	listProviders(): Array<Omit<RegisteredProvider, "prune">> {
@@ -35,6 +37,9 @@ export class PruneRouter {
 		normalized.artifact = await savePruneArtifact(normalized);
 
 		const provider = this.selectProvider(normalized);
+		logDiagnostic(
+			`[pi-prune-router] prune request documents=${normalized.documents.length} requestedProvider=${normalized.options?.provider ?? "<auto>"} availableProviders=${[...this.providers.keys()].join(",") || "<none>"} selectedProvider=${provider?.name ?? "<none>"}`,
+		);
 		if (!provider) {
 			return fallbackPrune(normalized, "No prune provider registered.");
 		}
@@ -52,7 +57,9 @@ export class PruneRouter {
 				text: renderWithArtifact(result.text, normalized.artifact.path),
 			};
 		} catch (error) {
-			return fallbackPrune(normalized, `Provider ${provider.name} failed: ${error instanceof Error ? error.message : String(error)}`);
+			const reason = `Provider ${provider.name} failed: ${error instanceof Error ? error.message : String(error)}`;
+			logDiagnostic(`[pi-prune-router] ${reason}`);
+			return fallbackPrune(normalized, reason);
 		}
 	}
 
@@ -73,6 +80,7 @@ function renderWithArtifact(text: string, artifactPath: string): string {
 }
 
 function fallbackPrune(request: NormalizedPruneRequest, reason: string): PruneResult {
+	logDiagnostic(`[pi-prune-router] fallback prune: ${reason}`);
 	const maxChars = request.budget?.chars ?? 20_000;
 	const rendered = request.documents
 		.map((document) => {
@@ -81,8 +89,9 @@ function fallbackPrune(request: NormalizedPruneRequest, reason: string): PruneRe
 			return `# ${source}\n${text}`;
 		})
 		.join("\n\n---\n\n");
+	const warningText = `[prune_context warning: ${reason} Used deterministic fallback truncation instead of provider pruning.]`;
 	return {
-		text: renderWithArtifact(rendered, request.artifact?.path ?? "<artifact unavailable>"),
+		text: renderWithArtifact(`${warningText}\n\n${rendered}`, request.artifact?.path ?? "<artifact unavailable>"),
 		warnings: [reason, "Used deterministic fallback truncation instead of model pruning."],
 		artifact: request.artifact,
 	};
