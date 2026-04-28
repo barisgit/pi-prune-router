@@ -81,25 +81,12 @@ function renderWithArtifact(text: string, artifactPath: string): string {
 
 function fallbackPrune(request: NormalizedPruneRequest, reason: string): PruneResult {
 	logDiagnostic(`[pi-prune-router] fallback prune: ${reason}`);
-	const maxChars = request.budget?.chars ?? 20_000;
-	const rendered = request.documents
-		.map((document) => {
-			const source = document.source ?? document.id ?? "input";
-			const text = truncate(document.text, maxChars);
-			return `# ${source}\n${text}`;
-		})
-		.join("\n\n---\n\n");
-	const warningText = `[prune_context warning: ${reason} Used deterministic fallback truncation instead of provider pruning.]`;
+	const warningText = `[prune_context error: ${reason} No provider-pruned output was returned.]`;
 	return {
-		text: renderWithArtifact(`${warningText}\n\n${rendered}`, request.artifact?.path ?? "<artifact unavailable>"),
-		warnings: [reason, "Used deterministic fallback truncation instead of model pruning."],
+		text: renderWithArtifact(warningText, request.artifact?.path ?? "<artifact unavailable>"),
+		warnings: [reason, "No provider-pruned output was returned."],
 		artifact: request.artifact,
 	};
-}
-
-function truncate(text: string, maxChars: number): string {
-	if (text.length <= maxChars) return text;
-	return `${text.slice(0, maxChars)}\n\n[Truncated fallback output: ${text.length - maxChars} chars omitted]`;
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T> {
