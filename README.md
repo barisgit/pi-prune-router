@@ -2,11 +2,11 @@
 
 Provider-agnostic pruning router/service extension for Pi.
 
-`pi-prune-router` owns the shared pruning API/event contract and the public `prune_context` tool. It does **not** implement a model strategy. Providers such as `pi-prune-swe-pruner-provider` register with it.
+`pi-prune-router` owns the shared pruning API/event contract and the public `scan_files` tool. It does **not** implement a model strategy. Providers such as `pi-prune-swe-pruner-provider` register with it.
 
 ## Public tool
 
-`prune_context` accepts local filesystem inputs only:
+`scan_files` accepts local filesystem inputs only:
 
 ```json
 {
@@ -52,7 +52,7 @@ The internal event can accept already-selected documents. The public tool intent
 
 ## Responsibilities
 
-- expose `prune_context`
+- expose `scan_files`
 - expand local files/directories/globs into documents
 - normalize internal prune requests
 - save full raw input artifacts under `~/.pi/agent/prune-artifacts`

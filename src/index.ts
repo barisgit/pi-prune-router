@@ -11,7 +11,7 @@ import {
 	type PruneRequestEvent,
 } from "./types";
 
-type PruneContextParams = {
+type ScanFilesParams = {
 	goal: string;
 	input: string | string[];
 	baseDir?: string;
@@ -42,12 +42,12 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerTool({
-		name: "prune_context",
-		label: "Prune Context",
-		description: "Prune local files, directories, or globs against a goal using the registered prune provider router. Returns plain text with real newlines.",
-		promptSnippet: "Prune local files/directories/globs against a goal before reading full content into context.",
+		name: "scan_files",
+		label: "Scan Files",
+		description: "Scan local files, directories, or globs for goal-relevant context using the registered prune provider router. Returns pruned plain text with real newlines.",
+		promptSnippet: "Scan local files/directories/globs for goal-relevant context before reading full content.",
 		promptGuidelines: [
-			"Use prune_context when a large file or small candidate set needs task-aware pruning before deeper reading.",
+			"Use scan_files when a large file, directory, glob, or small candidate set needs task-aware pruning before deeper reading.",
 			"Pass a local file, directory, glob, or array of those as input; the router reads files locally and delegates pruning to the configured provider.",
 		],
 		parameters: Type.Object({
@@ -63,15 +63,15 @@ export default function (pi: ExtensionAPI) {
 			lineNumbers: Type.Optional(Type.Boolean({ default: true, description: "Include line-number prefixes in output when supported." })),
 			timeoutMs: Type.Optional(Type.Number({ default: 60_000, description: "Prune provider timeout in milliseconds." })),
 		}),
-		prepareArguments(args): PruneContextParams {
-			if (!args || typeof args !== "object") return args as PruneContextParams;
+		prepareArguments(args): ScanFilesParams {
+			if (!args || typeof args !== "object") return args as ScanFilesParams;
 			const input = args as Record<string, unknown>;
 			if (input.input === undefined) {
-				if (typeof input.path === "string") return { ...input, input: input.path, goal: input.goal ?? input.query } as PruneContextParams;
-				if (Array.isArray(input.paths)) return { ...input, input: input.paths, goal: input.goal ?? input.query } as PruneContextParams;
+				if (typeof input.path === "string") return { ...input, input: input.path, goal: input.goal ?? input.query } as ScanFilesParams;
+				if (Array.isArray(input.paths)) return { ...input, input: input.paths, goal: input.goal ?? input.query } as ScanFilesParams;
 			}
-			if (input.goal === undefined && typeof input.query === "string") return { ...input, goal: input.query } as PruneContextParams;
-			return args as PruneContextParams;
+			if (input.goal === undefined && typeof input.query === "string") return { ...input, goal: input.query } as ScanFilesParams;
+			return args as ScanFilesParams;
 		},
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			const documents = await expandLocalInput(params.input, {
@@ -92,7 +92,7 @@ export default function (pi: ExtensionAPI) {
 					timeoutMs: params.timeoutMs,
 				},
 				metadata: {
-					caller: "prune_context",
+					caller: "scan_files",
 					cwd: ctx.cwd,
 					expandedPaths: documents.map((document) => document.source ?? document.id),
 				},

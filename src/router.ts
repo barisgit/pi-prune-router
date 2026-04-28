@@ -81,7 +81,7 @@ function renderWithArtifact(text: string, artifactPath: string): string {
 
 function fallbackPrune(request: NormalizedPruneRequest, reason: string): PruneResult {
 	logDiagnostic(`[pi-prune-router] fallback prune: ${reason}`);
-	const warningText = `[prune_context error: ${reason} No provider-pruned output was returned.]`;
+	const warningText = `[scan_files error: ${reason} No provider-pruned output was returned.]`;
 	return {
 		text: renderWithArtifact(warningText, request.artifact?.path ?? "<artifact unavailable>"),
 		warnings: [reason, "No provider-pruned output was returned."],
