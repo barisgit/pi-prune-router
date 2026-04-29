@@ -18,4 +18,18 @@ describe("expandLocalInput", () => {
 			await rm(dir, { recursive: true, force: true });
 		}
 	});
+
+	it("accepts common documentation and config text extensions", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "pi-prune-router-"));
+		try {
+			const tex = join(dir, "manual.tex");
+			const jsonc = join(dir, "settings.jsonc");
+			await writeFile(tex, "\\section{Reference}\nGPIO table", "utf8");
+			await writeFile(jsonc, "// config\n{ \"enabled\": true }", "utf8");
+			const docs = await expandLocalInput([tex, jsonc], { maxFiles: 5 });
+			expect(docs.map((doc) => doc.source).sort()).toEqual([jsonc, tex].sort());
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
 });
