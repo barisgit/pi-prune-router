@@ -41,7 +41,7 @@ export class PruneRouter {
 			`[pi-prune-router] prune request documents=${normalized.documents.length} requestedProvider=${normalized.options?.provider ?? "<auto>"} availableProviders=${[...this.providers.keys()].join(",") || "<none>"} selectedProvider=${provider?.name ?? "<none>"}`,
 		);
 		if (!provider) {
-			return fallbackPrune(normalized, "No prune provider registered.");
+			throw pruneFailure(normalized, "No prune provider registered.");
 		}
 
 		try {
@@ -58,8 +58,7 @@ export class PruneRouter {
 			};
 		} catch (error) {
 			const reason = `Provider ${provider.name} failed: ${error instanceof Error ? error.message : String(error)}`;
-			logDiagnostic(`[pi-prune-router] ${reason}`);
-			return fallbackPrune(normalized, reason);
+			throw pruneFailure(normalized, reason);
 		}
 	}
 
@@ -79,14 +78,11 @@ function renderWithArtifact(text: string, artifactPath: string): string {
 	return `${trimmed}\n\n[Full unpruned input saved at: ${artifactPath}]`;
 }
 
-function fallbackPrune(request: NormalizedPruneRequest, reason: string): PruneResult {
-	logDiagnostic(`[pi-prune-router] fallback prune: ${reason}`);
-	const warningText = `[scan_files error: ${reason} No provider-pruned output was returned.]`;
-	return {
-		text: renderWithArtifact(warningText, request.artifact?.path ?? "<artifact unavailable>"),
-		warnings: [reason, "No provider-pruned output was returned."],
-		artifact: request.artifact,
-	};
+function pruneFailure(request: NormalizedPruneRequest, reason: string): Error {
+	const artifactPath = request.artifact?.path ?? "<artifact unavailable>";
+	const message = `${reason} No provider-pruned output was returned. Full unpruned input saved at: ${artifactPath}`;
+	logDiagnostic(`[pi-prune-router] prune failed: ${message}`);
+	return new Error(message);
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T> {
