@@ -44,14 +44,16 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "scan_files",
 		label: "Scan Files",
-		description: "Scan local files, directories, or globs for goal-relevant context using the registered prune provider router. Returns pruned plain text with real newlines.",
-		promptSnippet: "Scan local files/directories/globs for goal-relevant context before reading full content.",
+		description: "Scan local files, directories, or globs with a narrow extraction goal. Returns pruned plain text with real newlines; best results come from goals that say exactly what to keep and what to ignore.",
+		promptSnippet: "Scan local files/directories/globs for narrowly specified, goal-relevant context before reading full content.",
 		promptGuidelines: [
 			"Use scan_files when a large file, directory, glob, or small candidate set needs task-aware pruning before deeper reading.",
+			"Write goals as extraction filters, not broad research questions: say 'Keep only ...' or 'Find the exact ...' and include 'Ignore/drop ...' for unrelated content.",
+			"If output keeps almost everything (for example ratio > 0.8), retry once with a stricter goal and/or slightly higher threshold instead of reading the full file.",
 			"Pass a local file, directory, glob, or array of those as input; the router reads files locally and delegates pruning to the configured provider.",
 		],
 		parameters: Type.Object({
-			goal: Type.String({ description: "Natural-language goal describing what to preserve." }),
+			goal: Type.String({ description: "Narrow extraction goal describing exact content to keep and, when useful, what to ignore/drop. Prefer 'Keep only...' over broad questions." }),
 			input: Type.Union([Type.String(), Type.Array(Type.String())], {
 				description: "Local file, directory, glob, or array of local files/directories/globs.",
 			}),
