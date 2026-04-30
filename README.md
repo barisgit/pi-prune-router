@@ -2,9 +2,9 @@
 
 Provider-agnostic pruning router/service extension for Pi.
 
-`pi-prune-router` owns the shared pruning API/event contract and the public `scan_files` tool. It does **not** implement a model strategy. Providers such as `pi-prune-swe-pruner-provider` register with it.
+`pi-prune-router` owns the shared pruning API/event contract, artifact lifecycle, provider selection, and the public `scan_files` tool. It does **not** implement a model strategy. Providers such as `pi-prune-swe-pruner-provider` register with it.
 
-## Public tool
+## Public tool: `scan_files`
 
 `scan_files` accepts local filesystem inputs only:
 
@@ -19,11 +19,22 @@ Provider-agnostic pruning router/service extension for Pi.
 }
 ```
 
-`input` may be a file, directory, glob, or array of those. The router reads local files, saves the raw input as artifacts, delegates model pruning to a registered provider, and returns plain text with real newlines.
+`input` may be:
 
-## Event contract
+- a local file path
+- a local directory path
+- a local glob
+- an array of local paths/directories/globs
 
-Provider registration:
+The router reads local files, saves the full raw input as an artifact, delegates pruning to a registered provider, and returns plain text with real newlines.
+
+The public tool intentionally does **not** accept manually pasted file contents. If an agent has to read a file and paste `content` into the pruning tool, the ergonomics are wrong; the router should expand local paths itself.
+
+## Internal event contract
+
+### Provider registration
+
+Providers register themselves with the router:
 
 ```ts
 pi.events.emit("prune:register-provider", {
@@ -34,7 +45,9 @@ pi.events.emit("prune:register-provider", {
 });
 ```
 
-Internal prune request:
+### Prune request
+
+Pi tools/extensions that already have content can call the internal prune bus:
 
 ```ts
 pi.events.emit("prune:request", {
@@ -48,14 +61,93 @@ pi.events.emit("prune:request", {
 });
 ```
 
-The internal event can accept already-selected documents. The public tool intentionally does not; if an agent has to manually pass content, the tool ergonomics are wrong.
+This internal event accepts already-selected documents. It is for tools such as `fetch`, `bash`, web search, MCP adapters, and future DCP/context flows.
 
 ## Responsibilities
 
 - expose `scan_files`
 - expand local files/directories/globs into documents
-- normalize internal prune requests
-- save full raw input artifacts under `~/.pi/agent/prune-artifacts`
-- select a registered provider by name or priority
-- handle provider timeout/fallback
+- normalize public and internal prune requests
+- save full raw input artifacts under `~/.pi/prune-artifacts`
+- clean old artifacts using `PI_PRUNE_ARTIFACT_RETENTION_DAYS` (default: `7`)
+- select a registered provider by explicit name or priority
+- enforce provider timeouts/failure handling
+- never return raw unpruned fallback content when a provider is missing or failed
 - render pruned text plus artifact reference
+
+## Artifact storage
+
+Default artifact root:
+
+```text
+~/.pi/prune-artifacts
+```
+
+Override:
+
+```bash
+export PI_PRUNE_ARTIFACT_DIR=/some/other/path
+```
+
+Retention:
+
+```bash
+export PI_PRUNE_ARTIFACT_RETENTION_DAYS=7
+```
+
+Set retention to `0` or a negative value to disable cleanup.
+
+Artifact directories are date-based:
+
+```text
+~/.pi/prune-artifacts/YYYY-MM-DD/<timestamp-id>.txt
+~/.pi/prune-artifacts/YYYY-MM-DD/<timestamp-id>.json
+```
+
+## Creating a new prune provider
+
+A new provider should be a separate Pi extension package. The router stays provider-agnostic.
+
+Minimum provider checklist:
+
+1. Add a Pi extension entrypoint.
+2. Implement a `prune(request, signal)` function that accepts a normalized prune request.
+3. Register with:
+
+   ```ts
+   pi.events.emit("prune:register-provider", {
+     name: "my-provider",
+     priority: 50,
+     capabilities: { multiDocument: true },
+     prune,
+   });
+   ```
+
+4. Return a `PruneResult` with plain `text` and optional `documents`, `stats`, `warnings`, and `provider`.
+5. Re-register on `session_start` so reloads/new sessions pick up the provider.
+6. Add the provider package to `~/.pi/agent/settings.json`.
+7. Test with `scan_files` against a small local file.
+
+Provider implementations may call a remote HTTP/GPU backend, a local process, a SaaS reranker, or a pure heuristic implementation. The router API is the same.
+
+## Smoke test
+
+After installing a provider and reloading Pi:
+
+```json
+{
+  "goal": "Find tool registration and provider registration logic",
+  "input": "/Users/blaz/Programming_local/Projects/pi-extensions/pi-prune-router/src",
+  "threshold": 0.5,
+  "maxFiles": 20,
+  "lineNumbers": true
+}
+```
+
+Expected output:
+
+- plain text
+- `# <path>` document headings
+- score/token metadata when the provider supports it
+- `NNN | code` line numbers when `lineNumbers` is true
+- a full-input artifact reference at the bottom
