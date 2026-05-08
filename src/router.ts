@@ -26,6 +26,12 @@ export class PruneRouter {
 		logDiagnostic(`[pi-prune-router] registered provider name=${provider.name} priority=${provider.priority ?? 0}`);
 	}
 
+	unregisterProvider(name: string): void {
+		if (this.providers.delete(name)) {
+			logDiagnostic(`[pi-prune-router] unregistered provider name=${name}`);
+		}
+	}
+
 	listProviders(): Array<Omit<RegisteredProvider, "prune">> {
 		return [...this.providers.values()]
 			.sort(compareProviders)
@@ -36,36 +42,47 @@ export class PruneRouter {
 		const normalized = normalizePruneRequest(request);
 		normalized.artifact = await savePruneArtifact(normalized);
 
-		const provider = this.selectProvider(normalized);
+		const providers = this.selectProviders(normalized);
 		logDiagnostic(
-			`[pi-prune-router] prune request documents=${normalized.documents.length} requestedProvider=${normalized.options?.provider ?? "<auto>"} availableProviders=${[...this.providers.keys()].join(",") || "<none>"} selectedProvider=${provider?.name ?? "<none>"}`,
+			`[pi-prune-router] prune request documents=${normalized.documents.length} requestedProvider=${normalized.options?.provider ?? "<auto>"} availableProviders=${[...this.providers.keys()].join(",") || "<none>"} selectedProviders=${providers.map((provider) => provider.name).join(",") || "<none>"}`,
 		);
-		if (!provider) {
-			throw pruneFailure(normalized, "No prune provider registered.");
+		if (providers.length === 0) {
+			const requested = normalized.options?.provider;
+			throw pruneFailure(normalized, requested ? `Requested prune provider not registered: ${requested}.` : "No prune provider registered.");
 		}
 
-		try {
-			const result = await withTimeout(
-				provider.prune(normalized, signal),
-				normalized.options?.timeoutMs ?? 60_000,
-				signal,
-			);
-			return {
-				...result,
-				provider: result.provider ?? provider.name,
-				artifact: result.artifact ?? normalized.artifact,
-				text: renderWithArtifact(result.text, normalized.artifact.path),
-			};
-		} catch (error) {
-			const reason = `Provider ${provider.name} failed: ${error instanceof Error ? error.message : String(error)}`;
-			throw pruneFailure(normalized, reason);
+		const failures: string[] = [];
+		for (const provider of providers) {
+			try {
+				const result = await withTimeout(
+					provider.prune(normalized, signal),
+					normalized.options?.timeoutMs ?? 60_000,
+					signal,
+				);
+				return {
+					...result,
+					provider: result.provider ?? provider.name,
+					artifact: result.artifact ?? normalized.artifact,
+					text: renderWithArtifact(result.text, normalized.artifact.path),
+				};
+			} catch (error) {
+				const reason = `Provider ${provider.name} failed: ${error instanceof Error ? error.message : String(error)}`;
+				failures.push(reason);
+				logDiagnostic(`[pi-prune-router] ${reason}`);
+				if (normalized.options?.provider) break;
+			}
 		}
+
+		throw pruneFailure(normalized, failures.join("; "));
 	}
 
-	private selectProvider(request: NormalizedPruneRequest): RegisteredProvider | undefined {
+	private selectProviders(request: NormalizedPruneRequest): RegisteredProvider[] {
 		const requested = request.options?.provider;
-		if (requested) return this.providers.get(requested);
-		return [...this.providers.values()].sort(compareProviders)[0];
+		if (requested) {
+			const provider = this.providers.get(requested);
+			return provider ? [provider] : [];
+		}
+		return [...this.providers.values()].sort(compareProviders);
 	}
 }
 

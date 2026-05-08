@@ -5,6 +5,7 @@ import { logDiagnostic } from "./log";
 import { PruneRouter } from "./router";
 import {
 	PRUNE_REGISTER_PROVIDER_EVENT,
+	PRUNE_UNREGISTER_PROVIDER_EVENT,
 	PRUNE_REQUEST_EVENT,
 	type PruneProviderRegistration,
 	type PruneRequest,
@@ -33,6 +34,11 @@ export default function (pi: ExtensionAPI) {
 		} catch (error) {
 			logDiagnostic("[pi-prune-router] failed to register provider", error);
 		}
+	});
+
+	pi.events.on(PRUNE_UNREGISTER_PROVIDER_EVENT, (payload) => {
+		const name = typeof payload === "string" ? payload : (payload as { name?: unknown } | undefined)?.name;
+		if (typeof name === "string") router.unregisterProvider(name);
 	});
 
 	pi.events.on(PRUNE_REQUEST_EVENT, (payload) => {
