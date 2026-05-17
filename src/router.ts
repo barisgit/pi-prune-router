@@ -1,3 +1,4 @@
+import { formatSize, truncateHead } from "@mariozechner/pi-coding-agent";
 import type {
 	NormalizedPruneRequest,
 	PruneProviderRegistration,
@@ -7,6 +8,9 @@ import type {
 import { savePruneArtifact } from "./artifacts";
 import { logDiagnostic } from "./log";
 import { normalizePruneRequest } from "./normalize";
+
+export const PRUNE_OUTPUT_MAX_BYTES = 20 * 1024;
+export const PRUNE_OUTPUT_MAX_LINES = 1000;
 
 interface RegisteredProvider extends PruneProviderRegistration {
 	registeredAt: number;
@@ -59,11 +63,13 @@ export class PruneRouter {
 					normalized.options?.timeoutMs ?? 60_000,
 					signal,
 				);
+				const capped = capProviderOutput(result.text, normalized.artifact.path);
 				return {
 					...result,
 					provider: result.provider ?? provider.name,
 					artifact: result.artifact ?? normalized.artifact,
-					text: renderWithArtifact(result.text, normalized.artifact.path),
+					text: capped.text,
+					truncation: capped.truncation,
 				};
 			} catch (error) {
 				const reason = `Provider ${provider.name} failed: ${error instanceof Error ? error.message : String(error)}`;
@@ -88,6 +94,31 @@ export class PruneRouter {
 
 function compareProviders(a: RegisteredProvider, b: RegisteredProvider): number {
 	return (b.priority ?? 0) - (a.priority ?? 0) || a.registeredAt - b.registeredAt || a.name.localeCompare(b.name);
+}
+
+function capProviderOutput(text: string, artifactPath: string): Pick<PruneResult, "text" | "truncation"> {
+	const truncation = truncateHead(text, {
+		maxBytes: PRUNE_OUTPUT_MAX_BYTES,
+		maxLines: PRUNE_OUTPUT_MAX_LINES,
+	});
+	if (!truncation.truncated) {
+		return { text: renderWithArtifact(text, artifactPath) };
+	}
+
+	const cappedText = truncation.firstLineExceedsLimit
+		? `[Pruned output omitted: first line exceeds ${formatSize(truncation.maxBytes)} limit. Full unpruned input saved at: ${artifactPath}]`
+		: `${truncation.content.trimEnd()}\n\n${formatPrunedOutputTruncationNotice(truncation, artifactPath)}`;
+	return {
+		text: cappedText,
+		truncation,
+	};
+}
+
+function formatPrunedOutputTruncationNotice(truncation: NonNullable<PruneResult["truncation"]>, artifactPath: string): string {
+	if (truncation.truncatedBy === "lines") {
+		return `[Pruned output truncated: showing lines 1-${truncation.outputLines} of ${truncation.totalLines}. Full unpruned input saved at: ${artifactPath}]`;
+	}
+	return `[Pruned output truncated: showing lines 1-${truncation.outputLines} of ${truncation.totalLines} (${formatSize(truncation.maxBytes)} limit). Full unpruned input saved at: ${artifactPath}]`;
 }
 
 function renderWithArtifact(text: string, artifactPath: string): string {

@@ -1,3 +1,5 @@
+import type { TruncationResult } from "@mariozechner/pi-coding-agent";
+
 export const PRUNE_REGISTER_PROVIDER_EVENT = "prune:register-provider";
 export const PRUNE_UNREGISTER_PROVIDER_EVENT = "prune:unregister-provider";
 export const PRUNE_REQUEST_EVENT = "prune:request";
@@ -95,6 +97,7 @@ export interface PruneResult {
 	warnings?: string[];
 	artifact?: PruneArtifact;
 	provider?: string;
+	truncation?: TruncationResult;
 }
 
 export interface PruneProviderCapabilities {
