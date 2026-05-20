@@ -137,7 +137,7 @@ After installing a provider and reloading Pi:
 ```json
 {
   "goal": "Find tool registration and provider registration logic",
-  "input": "/Users/blaz/Programming_local/Projects/pi-extensions/pi-prune-router/src",
+  "input": "/path/to/pi-prune-router/src",
   "threshold": 0.5,
   "maxFiles": 20,
   "lineNumbers": true
